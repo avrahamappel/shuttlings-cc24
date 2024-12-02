@@ -23,12 +23,12 @@
         naersk' = pkgs.callPackage naersk {};
 
         shuttle = naersk'.buildPackage rec {
-          version = "0.48.0";
+          version = "0.49.0";
           src = pkgs.fetchFromGitHub {
             owner = "shuttle-hq";
             repo = "shuttle";
             rev = "v${version}";
-            hash = "sha256-PjPxx1Dmpv+ibXl2n6+yz0myOxvNtmtEkRmx7eR+dts=";
+            hash = "sha256-97AiRgTPzkNsnxMTF0zleHVR6QYLyRlhguh2nz+duUM=";
           };
         };
       in rec {
