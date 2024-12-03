@@ -68,11 +68,14 @@
           ];
         };
 
-        defaultApp = flake-utils.lib.mkApp { # Run cch24-validator tests against the server
+        # Run cch24-validator tests against the server
+        defaultApp = flake-utils.lib.mkApp {
           drv = pkgs.writeShellScriptBin "run-cch24-validator-tests" ''
-            ${self.packages.${system}.shuttle}/bin/shuttle run ${self.defaultPackage.${system}} &
-            sleep 5
+            ${self.packages.${system}.shuttle}/bin/shuttle run &
+            pid=$!
+            sleep 1
             ${self.packages.${system}.cch24-validator}/bin/cch24-validator "$@"
+            kill $pid
           '';
         };
       }
