@@ -1,5 +1,9 @@
+use std::net::Ipv4Addr;
+
 use actix_web::http::header;
+use actix_web::web::Query;
 use actix_web::{get, web::ServiceConfig, HttpResponse};
+use serde::Deserialize;
 use shuttle_actix_web::ShuttleActixWeb;
 
 #[get("/")]
@@ -17,10 +21,32 @@ async fn rick_roll() -> HttpResponse {
         .finish()
 }
 
+#[derive(Deserialize)]
+struct DestQueryParams {
+    from: Ipv4Addr,
+    key: Ipv4Addr,
+}
+
+#[get("/2/dest")]
+async fn day2part1(params: Query<DestQueryParams>) -> String {
+    let parts: Vec<_> = params
+        .from
+        .octets()
+        .iter()
+        .enumerate()
+        .map(|(i, o)| o.overflowing_add(params.key.octets()[i]).0.to_string())
+        .collect();
+
+    parts.join(".")
+}
+
+#[allow(clippy::unused_async)]
 #[shuttle_runtime::main]
 async fn main() -> ShuttleActixWeb<impl FnOnce(&mut ServiceConfig) + Send + Clone + 'static> {
     let config = move |cfg: &mut ServiceConfig| {
-        cfg.service(hello_bird).service(rick_roll);
+        cfg.service(hello_bird)
+            .service(rick_roll)
+            .service(day2part1);
     };
 
     Ok(config.into())
