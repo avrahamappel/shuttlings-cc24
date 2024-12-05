@@ -40,13 +40,33 @@ async fn day2part1(params: Query<DestQueryParams>) -> String {
     parts.join(".")
 }
 
+#[derive(Deserialize)]
+struct KeyQueryParams {
+    from: Ipv4Addr,
+    to: Ipv4Addr,
+}
+
+#[get("/2/key")]
+async fn day2part2(params: Query<KeyQueryParams>) -> String {
+    let parts: Vec<_> = params
+        .to
+        .octets()
+        .iter()
+        .enumerate()
+        .map(|(i, o)| o.overflowing_sub(params.from.octets()[i]).0.to_string())
+        .collect();
+
+    parts.join(".")
+}
+
 #[allow(clippy::unused_async)]
 #[shuttle_runtime::main]
 async fn main() -> ShuttleActixWeb<impl FnOnce(&mut ServiceConfig) + Send + Clone + 'static> {
     let config = move |cfg: &mut ServiceConfig| {
         cfg.service(hello_bird)
             .service(rick_roll)
-            .service(day2part1);
+            .service(day2part1)
+            .service(day2part2);
     };
 
     Ok(config.into())
