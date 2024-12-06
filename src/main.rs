@@ -1,4 +1,4 @@
-use std::net::Ipv4Addr;
+use std::net::{Ipv4Addr, Ipv6Addr};
 
 use actix_web::http::header;
 use actix_web::web::Query;
@@ -59,6 +59,46 @@ async fn day2part2(params: Query<KeyQueryParams>) -> String {
     parts.join(".")
 }
 
+#[derive(Deserialize)]
+struct V6DestQueryParams {
+    from: Ipv6Addr,
+    key: Ipv6Addr,
+}
+
+#[get("/2/v6/dest")]
+async fn day2part3dest(params: Query<V6DestQueryParams>) -> String {
+    let parts: Vec<_> = params
+        .from
+        .octets()
+        .iter()
+        .enumerate()
+        .map(|(i, o)| o ^ params.key.octets()[i])
+        .collect();
+
+    let parts: [u8; 16] = parts.try_into().unwrap();
+    Ipv6Addr::from(parts).to_string()
+}
+
+#[derive(Deserialize)]
+struct V6KeyQueryParams {
+    from: Ipv6Addr,
+    to: Ipv6Addr,
+}
+
+#[get("/2/v6/key")]
+async fn day2part3key(params: Query<V6KeyQueryParams>) -> String {
+    let parts: Vec<_> = params
+        .to
+        .octets()
+        .iter()
+        .enumerate()
+        .map(|(i, o)| (o ^ params.from.octets()[i]))
+        .collect();
+
+    let parts: [u8; 16] = parts.try_into().unwrap();
+    Ipv6Addr::from(parts).to_string()
+}
+
 #[allow(clippy::unused_async)]
 #[shuttle_runtime::main]
 async fn main() -> ShuttleActixWeb<impl FnOnce(&mut ServiceConfig) + Send + Clone + 'static> {
@@ -66,7 +106,9 @@ async fn main() -> ShuttleActixWeb<impl FnOnce(&mut ServiceConfig) + Send + Clon
         cfg.service(hello_bird)
             .service(rick_roll)
             .service(day2part1)
-            .service(day2part2);
+            .service(day2part2)
+            .service(day2part3dest)
+            .service(day2part3key);
     };
 
     Ok(config.into())
