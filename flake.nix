@@ -55,7 +55,7 @@
         devShell = pkgs.mkShell {
           nativeBuildInputs = with pkgs; [
             alejandra
-            rust-analyzer
+            rust-analyzer-nightly
             shuttle
             cch24-validator
             (pkgs.fenix.stable.withComponents [
