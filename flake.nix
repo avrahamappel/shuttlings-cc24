@@ -2,8 +2,10 @@
   inputs = {
     flake-utils.url = "github:numtide/flake-utils";
     naersk.url = "github:nix-community/naersk";
+    naersk.inputs.nixpkgs.follows = "nixpkgs";
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     fenix.url = "github:nix-community/fenix";
+    fenix.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs = {
@@ -35,10 +37,10 @@
 
         cch24-validator = naersk'.buildPackage rec {
           name = "cch24-validator";
-          version = "2.0.1";
+          version = "5.0.0";
           src = pkgs.fetchzip {
             url = "https://crates.io/api/v1/crates/${name}/${version}/download";
-            hash = "sha256-AdKFVGvRe3xG3bzaaAJ95NSWjJ4oCgmB8Y7UcaDVOiM=";
+            hash = "sha256-Gk+DN80nnFrbwLFDw+VHir2YjSOr6KaINCYezjymfTs=";
             extension = "tar";
           };
         };
