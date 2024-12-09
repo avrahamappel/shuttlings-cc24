@@ -1,10 +1,11 @@
 use std::net::{Ipv4Addr, Ipv6Addr};
 
 use actix_web::http::header;
-use actix_web::web::Query;
-use actix_web::{get, web::ServiceConfig, HttpResponse};
-use serde::Deserialize;
+use actix_web::web::{Query, ServiceConfig};
+use actix_web::{get, post, HttpResponse};
+use serde::{Deserialize, Deserializer};
 use shuttle_actix_web::ShuttleActixWeb;
+use toml::Value;
 
 #[get("/")]
 async fn hello_bird() -> &'static str {
@@ -99,6 +100,65 @@ async fn day2part3key(params: Query<V6KeyQueryParams>) -> String {
     Ipv6Addr::from(parts).to_string()
 }
 
+#[derive(Deserialize, Debug)]
+struct Order {
+    item: String,
+    quantity: u32,
+}
+
+fn deserialize_orders<'de, D>(des: D) -> Result<Vec<Order>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let values: Vec<Value> = Vec::deserialize(des)?;
+    let mut result = Vec::new();
+
+    for value in values {
+        if let Ok(inner) = value.try_into() {
+            result.push(inner);
+        }
+    }
+
+    Ok(result)
+}
+
+#[derive(Deserialize, Debug)]
+struct Metadata {
+    #[serde(deserialize_with = "deserialize_orders")]
+    orders: Vec<Order>,
+}
+
+#[derive(Deserialize, Debug)]
+struct Package {
+    metadata: Metadata,
+}
+
+#[derive(Deserialize, Debug)]
+struct Toml {
+    package: Package,
+}
+
+#[post("/5/manifest")]
+async fn day5part1(data: String) -> HttpResponse {
+    if let Ok(toml) = toml::from_str::<Toml>(&data) {
+        //dbg!(&toml);
+        let orders = toml
+            .package
+            .metadata
+            .orders
+            .iter()
+            .map(|o| format!("{}: {}", o.item, o.quantity))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        if !orders.is_empty() {
+            return HttpResponse::Ok().body(orders);
+        }
+    }
+
+    HttpResponse::NoContent().finish()
+}
+
 #[allow(clippy::unused_async)]
 #[shuttle_runtime::main]
 async fn main() -> ShuttleActixWeb<impl FnOnce(&mut ServiceConfig) + Send + Clone + 'static> {
@@ -108,7 +168,8 @@ async fn main() -> ShuttleActixWeb<impl FnOnce(&mut ServiceConfig) + Send + Clon
             .service(day2part1)
             .service(day2part2)
             .service(day2part3dest)
-            .service(day2part3key);
+            .service(day2part3key)
+            .service(day5part1);
     };
 
     Ok(config.into())
