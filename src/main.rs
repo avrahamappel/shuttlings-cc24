@@ -106,57 +106,97 @@ struct Order {
     quantity: u32,
 }
 
-fn deserialize_orders<'de, D>(des: D) -> Result<Vec<Order>, D::Error>
+fn deserialize_orders<'de, D>(des: D) -> Result<Option<Vec<Order>>, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let values: Vec<Value> = Vec::deserialize(des)?;
-    let mut result = Vec::new();
+    let opt: Option<Vec<Value>> = Option::deserialize(des)?;
 
-    for value in values {
-        if let Ok(inner) = value.try_into() {
-            result.push(inner);
+    if let Some(values) = opt {
+        let mut result = Vec::new();
+
+        for value in values {
+            if let Ok(inner) = value.try_into() {
+                result.push(inner);
+            }
         }
-    }
 
-    Ok(result)
+        Ok(Some(result))
+    } else {
+        Ok(None)
+    }
 }
 
 #[derive(Deserialize, Debug)]
 struct Metadata {
-    #[serde(deserialize_with = "deserialize_orders")]
-    orders: Vec<Order>,
+    #[serde(default, deserialize_with = "deserialize_orders")]
+    orders: Option<Vec<Order>>,
+}
+
+#[derive(Deserialize, Debug)]
+struct WrappedMetadata {
+    metadata: Metadata,
+}
+
+fn deserialize_metadata<'de, D>(des: D) -> Result<Metadata, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum MaybeWrappedMetadata {
+        Wrapped(WrappedMetadata),
+        Unwrapped(Metadata),
+    }
+
+    let deserialized = MaybeWrappedMetadata::deserialize(des)?;
+    match deserialized {
+        MaybeWrappedMetadata::Wrapped(wm) => Ok(wm.metadata),
+        MaybeWrappedMetadata::Unwrapped(m) => Ok(m),
+    }
 }
 
 #[derive(Deserialize, Debug)]
 struct Package {
+    name: String,
+    authors: Option<Vec<String>>,
+    keywords: Vec<String>,
+    // one of the tests has double nesting by mistake
+    #[serde(alias = "package", deserialize_with = "deserialize_metadata")]
     metadata: Metadata,
 }
 
 #[derive(Deserialize, Debug)]
-struct Toml {
+struct CargoToml {
     package: Package,
 }
 
 #[post("/5/manifest")]
 async fn day5part1(data: String) -> HttpResponse {
-    if let Ok(toml) = toml::from_str::<Toml>(&data) {
-        //dbg!(&toml);
-        let orders = toml
-            .package
-            .metadata
-            .orders
-            .iter()
-            .map(|o| format!("{}: {}", o.item, o.quantity))
-            .collect::<Vec<_>>()
-            .join("\n");
+    dbg!(&data);
+    dbg!(toml::from_str::<toml::Table>(&data).unwrap());
+    if let Ok(toml) = toml::from_str::<CargoToml>(&data) {
+        let maybe_orders = toml.package.metadata.orders;
 
-        if !orders.is_empty() {
-            return HttpResponse::Ok().body(orders);
+        if let Some(orders) = maybe_orders {
+            if !orders.is_empty() {
+                let order_str = orders
+                    .iter()
+                    .map(|o| format!("{}: {}", o.item, o.quantity))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+
+                eprintln!("ok");
+                return HttpResponse::Ok().body(order_str);
+            }
         }
-    }
 
-    HttpResponse::NoContent().finish()
+        eprintln!("empty");
+        HttpResponse::NoContent().finish()
+    } else {
+        eprintln!("bad request");
+        HttpResponse::BadRequest().body("Invalid manifest")
+    }
 }
 
 #[allow(clippy::unused_async)]
