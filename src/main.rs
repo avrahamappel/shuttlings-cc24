@@ -2,7 +2,8 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 
 use actix_web::http::header;
 use actix_web::web::{Query, ServiceConfig};
-use actix_web::{get, post, HttpResponse};
+use actix_web::{get, post, HttpRequest, HttpResponse};
+use cargo_toml::ContentType;
 use serde::Deserialize;
 use shuttle_actix_web::ShuttleActixWeb;
 
@@ -103,10 +104,25 @@ async fn day2part3key(params: Query<V6KeyQueryParams>) -> String {
 }
 
 #[post("/5/manifest")]
-async fn day5part1(data: String) -> HttpResponse {
-    dbg!(&data);
-    dbg!(toml::from_str::<toml::Table>(&data).unwrap());
-    match cargo_toml::from_str(&data) {
+async fn day5(data: String, request: HttpRequest) -> HttpResponse {
+    let content_type = request.headers().get("Content-type");
+
+    if content_type.is_none()
+        || !matches!(
+            content_type.unwrap().as_bytes(),
+            b"application/json" | b"application/yaml" | b"application/toml",
+        )
+    {
+        return HttpResponse::UnsupportedMediaType().finish();
+    }
+    let content_type = match content_type.unwrap().as_bytes() {
+        b"application/json" => ContentType::Json,
+        b"application/yaml" => ContentType::Yaml,
+        b"application/toml" => ContentType::Toml,
+        _ => unreachable!(),
+    };
+
+    match cargo_toml::from_str(&data, content_type) {
         CargoOrders::Orders(orders) => {
             if orders.is_empty() {
                 HttpResponse::NoContent().finish()
@@ -136,7 +152,7 @@ async fn main() -> ShuttleActixWeb<impl FnOnce(&mut ServiceConfig) + Send + Clon
             .service(day2part2)
             .service(day2part3dest)
             .service(day2part3key)
-            .service(day5part1);
+            .service(day5);
     };
 
     Ok(config.into())

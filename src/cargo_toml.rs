@@ -1,7 +1,36 @@
 use std::collections::HashMap;
+use std::str::FromStr;
 
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer};
-use toml::Value;
+
+#[derive(Deserialize, Debug)]
+#[serde(untagged)]
+enum Value {
+    Toml(toml::Value),
+    Json(serde_json::Value),
+    Yaml(serde_yml::Value),
+}
+
+#[allow(dead_code)]
+enum DeserializeError {
+    Toml(toml::de::Error),
+    Json(serde_json::Error),
+    Yaml(serde_yml::Error),
+}
+
+impl Value {
+    fn try_into<T>(self) -> Result<T, DeserializeError>
+    where
+        T: DeserializeOwned,
+    {
+        match self {
+            Self::Toml(value) => value.try_into().map_err(DeserializeError::Toml),
+            Self::Json(value) => serde_json::from_value(value).map_err(DeserializeError::Json),
+            Self::Yaml(value) => serde_yml::from_value(value).map_err(DeserializeError::Yaml),
+        }
+    }
+}
 
 #[derive(Deserialize, Debug)]
 pub struct Order {
@@ -66,8 +95,22 @@ enum Edition {
     E2024,
 }
 
+fn deserialize_rust_version<'de, D>(des: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let str_o: Option<String> = Option::deserialize(des)?;
+    if let Some(str) = str_o {
+        f64::from_str(&str).map_err(|_| serde::de::Error::custom("Invalid version string"))?;
+        Ok(Some(str))
+    } else {
+        Ok(None)
+    }
+}
+
 #[allow(dead_code)]
 #[derive(Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
 struct Package {
     name: String,
     #[serde(default)]
@@ -76,6 +119,8 @@ struct Package {
     #[serde(alias = "package", default, deserialize_with = "deserialize_metadata")]
     metadata: Metadata,
     edition: Option<Edition>,
+    #[serde(default, deserialize_with = "deserialize_rust_version")]
+    rust_version: Option<String>,
 }
 
 #[allow(dead_code)]
@@ -112,8 +157,21 @@ pub enum CargoOrders {
     InvalidManifest,
 }
 
-pub fn from_str(data: &str) -> CargoOrders {
-    if let Ok(cargo_toml) = toml::from_str::<CargoToml>(data) {
+#[derive(Clone, Copy)]
+pub enum ContentType {
+    Yaml,
+    Json,
+    Toml,
+}
+
+pub fn from_str(data: &str, content_type: ContentType) -> CargoOrders {
+    let cargo_res: Result<CargoToml, DeserializeError> = match content_type {
+        ContentType::Yaml => serde_yml::from_str(data).map_err(DeserializeError::Yaml),
+        ContentType::Json => serde_json::from_str(data).map_err(DeserializeError::Json),
+        ContentType::Toml => toml::from_str(data).map_err(DeserializeError::Toml),
+    };
+
+    if let Ok(cargo_toml) = cargo_res {
         if cargo_toml
             .package
             .keywords
@@ -153,6 +211,18 @@ name = "test"
 [profile.release]
 incremental = "woohoo"
 "#
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn cargo_toml_errors_on_invalid_rust_version_string() {
+        assert!(serde_yml::from_str::<CargoToml>(
+            "
+package:
+  name: test
+  rust-version: false
+"
         )
         .is_err());
     }
