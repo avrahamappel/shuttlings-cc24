@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use serde::{Deserialize, Deserializer};
-use serde_repr::Deserialize_repr;
 use toml::Value;
 
 #[derive(Deserialize, Debug)]
@@ -57,23 +56,14 @@ where
 
 #[derive(Debug, Deserialize)]
 enum Edition {
+    #[serde(rename = "2015")]
     E2015,
+    #[serde(rename = "2018")]
     E2018,
+    #[serde(rename = "2021")]
     E2021,
+    #[serde(rename = "2024")]
     E2024,
-}
-
-fn deserialize_edition<'de, D>(des: D) -> Result<Option<Edition>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    match String::deserialize(des)?.as_str() {
-        "2015" => Ok(Some(Edition::E2015)),
-        "2018" => Ok(Some(Edition::E2018)),
-        "2021" => Ok(Some(Edition::E2021)),
-        "2024" => Ok(Some(Edition::E2024)),
-        _ => Err(serde::de::Error::custom("Invalid edition string")),
-    }
 }
 
 #[allow(dead_code)]
@@ -85,7 +75,6 @@ struct Package {
     // one of the tests has double nesting by mistake
     #[serde(alias = "package", default, deserialize_with = "deserialize_metadata")]
     metadata: Metadata,
-    #[serde(default, deserialize_with = "deserialize_edition")]
     edition: Option<Edition>,
 }
 
@@ -95,17 +84,18 @@ struct Profile {
     incremental: bool,
 }
 
+#[derive(Debug, Deserialize)]
+enum Resolver {
+    #[serde(rename = "1")]
+    R1,
+    #[serde(rename = "2")]
+    R2,
+}
+
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct Workspace {
     resolver: Resolver,
-}
-
-#[derive(Debug, Deserialize_repr)]
-#[repr(u8)]
-enum Resolver {
-    One = 1,
-    Two = 2,
 }
 
 #[allow(dead_code)]
