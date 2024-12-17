@@ -3,7 +3,7 @@ use std::sync::Mutex;
 
 use actix_web::http::header;
 use actix_web::web::{Data, Header, Json, Query, ServiceConfig};
-use actix_web::{get, post, Either, HttpRequest, HttpResponse};
+use actix_web::{get, post, Either, HttpResponse};
 use cargo_toml::ContentType;
 use serde::Deserialize;
 use shuttle_actix_web::ShuttleActixWeb;
@@ -11,6 +11,7 @@ use shuttle_actix_web::ShuttleActixWeb;
 mod bucket;
 mod cargo_toml;
 mod conversion;
+mod game;
 
 use bucket::Bucket;
 use cargo_toml::CargoOrders;
@@ -110,22 +111,14 @@ async fn day2part3key(params: Query<V6KeyQueryParams>) -> String {
 }
 
 #[post("/5/manifest")]
-async fn day5(data: String, request: HttpRequest) -> HttpResponse {
-    let content_type = request.headers().get("Content-type");
-
-    if content_type.is_none()
-        || !matches!(
-            content_type.unwrap().as_bytes(),
-            b"application/json" | b"application/yaml" | b"application/toml",
-        )
-    {
-        return HttpResponse::UnsupportedMediaType().finish();
-    }
-    let content_type = match content_type.unwrap().as_bytes() {
-        b"application/json" => ContentType::Json,
-        b"application/yaml" => ContentType::Yaml,
-        b"application/toml" => ContentType::Toml,
-        _ => unreachable!(),
+async fn day5(data: String, content_type: Header<header::ContentType>) -> HttpResponse {
+    let content_type = match content_type.0 .0.essence_str() {
+        "application/json" => ContentType::Json,
+        "application/yaml" => ContentType::Yaml,
+        "application/toml" => ContentType::Toml,
+        _ => {
+            return HttpResponse::UnsupportedMediaType().finish();
+        }
     };
 
     match cargo_toml::from_str(&data, content_type) {
@@ -191,7 +184,8 @@ async fn main() -> ShuttleActixWeb<impl FnOnce(&mut ServiceConfig) + Send + Clon
             .service(day2part3key)
             .service(day5)
             .service(day9)
-            .service(day9refill);
+            .service(day9refill)
+            .service(game::scope());
     };
 
     Ok(config.into())
