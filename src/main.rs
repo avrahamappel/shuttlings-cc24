@@ -2,7 +2,7 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 use std::time::Duration;
 
 use actix_web::http::header;
-use actix_web::web::{Data, Query, ServiceConfig};
+use actix_web::web::{Data, Header, Query, ServiceConfig};
 use actix_web::{get, post, HttpRequest, HttpResponse};
 use cargo_toml::ContentType;
 use leaky_bucket::RateLimiter;
@@ -10,7 +10,10 @@ use serde::Deserialize;
 use shuttle_actix_web::ShuttleActixWeb;
 
 mod cargo_toml;
+mod conversion;
+
 use crate::cargo_toml::CargoOrders;
+use conversion::Conversion;
 
 #[get("/")]
 async fn hello_bird() -> &'static str {
@@ -145,8 +148,24 @@ async fn day5(data: String, request: HttpRequest) -> HttpResponse {
 }
 
 #[post("/9/milk")]
-async fn day9(bucket: Data<RateLimiter>) -> HttpResponse {
+async fn day9(
+    bucket: Data<RateLimiter>,
+    content_type: Option<Header<header::ContentType>>,
+    body: Option<String>,
+) -> HttpResponse {
     if bucket.try_acquire(1) {
+        if let Some(Header(header::ContentType(mime))) = content_type {
+            if mime.essence_str() == "application/json" {
+                if let Some(str) = body {
+                    if let Ok(conversion) = serde_json::from_str::<Conversion>(&str) {
+                        return HttpResponse::Ok().body(conversion.convert());
+                    }
+                }
+
+                return HttpResponse::BadRequest().finish();
+            }
+        }
+
         HttpResponse::Ok().body("Milk withdrawn\n")
     } else {
         HttpResponse::TooManyRequests().body("No milk available\n")
