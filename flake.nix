@@ -37,10 +37,10 @@
 
         cch24-validator = naersk'.buildPackage rec {
           name = "cch24-validator";
-          version = "5.0.0";
+          version = "16.0.0";
           src = pkgs.fetchzip {
             url = "https://crates.io/api/v1/crates/${name}/${version}/download";
-            hash = "sha256-Gk+DN80nnFrbwLFDw+VHir2YjSOr6KaINCYezjymfTs=";
+            hash = "sha256-xsq7oeMBvCSqcXUfEtcUeElHS0gI4jaw9fD6oKfujxI=";
             extension = "tar";
           };
         };
@@ -57,7 +57,7 @@
         devShell = pkgs.mkShell {
           nativeBuildInputs = with pkgs; [
             alejandra
-            rust-analyzer-nightly
+            rust-analyzer
             shuttle
             cch24-validator
             (pkgs.fenix.stable.withComponents [
