@@ -1,9 +1,11 @@
 use std::net::{Ipv4Addr, Ipv6Addr};
+use std::time::Duration;
 
 use actix_web::http::header;
-use actix_web::web::{Query, ServiceConfig};
+use actix_web::web::{Data, Query, ServiceConfig};
 use actix_web::{get, post, HttpRequest, HttpResponse};
 use cargo_toml::ContentType;
+use leaky_bucket::RateLimiter;
 use serde::Deserialize;
 use shuttle_actix_web::ShuttleActixWeb;
 
@@ -142,17 +144,37 @@ async fn day5(data: String, request: HttpRequest) -> HttpResponse {
     }
 }
 
+#[post("/9/milk")]
+async fn day9(bucket: Data<RateLimiter>) -> HttpResponse {
+    if bucket.try_acquire(1) {
+        HttpResponse::Ok().body("Milk withdrawn\n")
+    } else {
+        HttpResponse::TooManyRequests().body("No milk available\n")
+    }
+}
+
 #[allow(clippy::unused_async)]
 #[shuttle_runtime::main]
 async fn main() -> ShuttleActixWeb<impl FnOnce(&mut ServiceConfig) + Send + Clone + 'static> {
+    let bucket = Data::new(
+        RateLimiter::builder()
+            .max(5)
+            .initial(5)
+            .interval(Duration::from_secs(1))
+            .build(),
+    )
+    .clone();
+
     let config = move |cfg: &mut ServiceConfig| {
-        cfg.service(hello_bird)
+        cfg.app_data(bucket)
+            .service(hello_bird)
             .service(rick_roll)
             .service(day2part1)
             .service(day2part2)
             .service(day2part3dest)
             .service(day2part3key)
-            .service(day5);
+            .service(day5)
+            .service(day9);
     };
 
     Ok(config.into())
