@@ -1,18 +1,19 @@
 use std::net::{Ipv4Addr, Ipv6Addr};
-use std::time::Duration;
+use std::sync::Mutex;
 
 use actix_web::http::header;
 use actix_web::web::{Data, Header, Json, Query, ServiceConfig};
 use actix_web::{get, post, Either, HttpRequest, HttpResponse};
 use cargo_toml::ContentType;
-use leaky_bucket::RateLimiter;
 use serde::Deserialize;
 use shuttle_actix_web::ShuttleActixWeb;
 
+mod bucket;
 mod cargo_toml;
 mod conversion;
 
-use crate::cargo_toml::CargoOrders;
+use bucket::Bucket;
+use cargo_toml::CargoOrders;
 use conversion::Conversion;
 
 #[get("/")]
@@ -149,11 +150,11 @@ async fn day5(data: String, request: HttpRequest) -> HttpResponse {
 
 #[post("/9/milk")]
 async fn day9(
-    bucket: Data<RateLimiter>,
+    bucket: Data<Mutex<Bucket>>,
     content_type: Option<Header<header::ContentType>>,
     body: Option<Json<Conversion>>,
 ) -> Either<Json<Conversion>, HttpResponse> {
-    if bucket.try_acquire(1) {
+    if bucket.lock().unwrap().get_milk() {
         match content_type {
             Some(Header(header::ContentType(mime))) if mime.essence_str() == "application/json" => {
                 if let Some(conversion) = body {
@@ -169,17 +170,16 @@ async fn day9(
     }
 }
 
+#[post("/9/refill")]
+async fn day9refill(bucket: Data<Mutex<Bucket>>) -> HttpResponse {
+    bucket.lock().unwrap().refill();
+    HttpResponse::Ok().finish()
+}
+
 #[allow(clippy::unused_async)]
 #[shuttle_runtime::main]
 async fn main() -> ShuttleActixWeb<impl FnOnce(&mut ServiceConfig) + Send + Clone + 'static> {
-    let bucket = Data::new(
-        RateLimiter::builder()
-            .max(5)
-            .initial(5)
-            .interval(Duration::from_secs(1))
-            .build(),
-    )
-    .clone();
+    let bucket = Data::new(Mutex::new(Bucket::new())).clone();
 
     let config = move |cfg: &mut ServiceConfig| {
         cfg.app_data(bucket)
@@ -190,7 +190,8 @@ async fn main() -> ShuttleActixWeb<impl FnOnce(&mut ServiceConfig) + Send + Clon
             .service(day2part3dest)
             .service(day2part3key)
             .service(day5)
-            .service(day9);
+            .service(day9)
+            .service(day9refill);
     };
 
     Ok(config.into())
