@@ -173,9 +173,11 @@ async fn day9refill(bucket: Data<Mutex<Bucket>>) -> HttpResponse {
 #[shuttle_runtime::main]
 async fn main() -> ShuttleActixWeb<impl FnOnce(&mut ServiceConfig) + Send + Clone + 'static> {
     let bucket = Data::new(Mutex::new(Bucket::new())).clone();
+    let game = game::new_shared_game().clone();
 
     let config = move |cfg: &mut ServiceConfig| {
         cfg.app_data(bucket)
+            .app_data(game)
             .service(hello_bird)
             .service(rick_roll)
             .service(day2part1)
