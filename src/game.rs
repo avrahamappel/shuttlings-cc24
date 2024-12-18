@@ -4,8 +4,20 @@ use std::fmt::{self, Display, Formatter};
 
 use actix_web::web::{Data, Path};
 use actix_web::{get, post, Either, HttpResponse, Scope};
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 use serde::Deserialize;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
+
+type SharedRng = Data<Mutex<StdRng>>;
+
+fn new_seeded_rng() -> StdRng {
+    StdRng::seed_from_u64(2024)
+}
+
+pub fn new_shared_rng() -> SharedRng {
+    Data::new(Mutex::new(new_seeded_rng()))
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(untagged, rename_all = "kebab-case")]
@@ -38,6 +50,21 @@ impl Game {
     fn new() -> Self {
         let board = Default::default();
         Self { board }
+    }
+
+    fn random(rng: &mut StdRng) -> Self {
+        let mut game = Self::new();
+        for i in 0..4 {
+            for j in 0..4 {
+                let piece = if rng.gen() {
+                    Piece::Cookie
+                } else {
+                    Piece::Milk
+                };
+                game.board[j][i] = Some(piece);
+            }
+        }
+        game
     }
 
     fn place(&mut self, piece: Piece, column: usize) -> bool {
@@ -176,7 +203,13 @@ async fn show_board(game: SharedGame) -> String {
 }
 
 #[post("/reset")]
-async fn reset_board(game: SharedGame) -> String {
+async fn reset_board(game: SharedGame, rng: SharedRng) -> String {
+    // Reset rng inside block
+    {
+        let mut rng = rng.lock().await;
+        *rng = new_seeded_rng();
+    }
+
     let mut game = game.write().await;
     game.reset();
     game.to_string()
@@ -216,11 +249,18 @@ async fn place_piece(params: Path<PlaceParams>, game: SharedGame) -> Either<Stri
     Either::Right(HttpResponse::BadRequest().finish())
 }
 
+#[get("/random-board")]
+async fn random_board(rng: SharedRng) -> String {
+    let mut rng = rng.lock().await;
+    Game::random(&mut rng).to_string()
+}
+
 pub fn scope() -> Scope {
     Scope::new("/12")
         .service(show_board)
         .service(reset_board)
         .service(place_piece)
+        .service(random_board)
 }
 
 #[cfg(test)]
