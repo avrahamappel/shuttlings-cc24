@@ -6,7 +6,7 @@ use actix_web::http::header;
 use actix_web::web::{Data, Header, Json, Query, ServiceConfig};
 use actix_web::{get, post, Either, HttpRequest, HttpResponse};
 use cargo_toml::ContentType;
-use jwt_simple::prelude::*;
+use jwt_simple::{prelude::*, JWTError};
 use serde::Deserialize;
 use serde_json::Value;
 use shuttle_actix_web::ShuttleActixWeb;
@@ -172,8 +172,10 @@ async fn day9refill(bucket: Data<Mutex<Bucket>>) -> HttpResponse {
     HttpResponse::Ok().finish()
 }
 
+type JWTKey = Data<HS256Key>;
+
 #[post("/16/wrap")]
-async fn day16part1wrap(key: Data<HS256Key>, json: Json<Value>) -> HttpResponse {
+async fn day16part1wrap(key: JWTKey, json: Json<Value>) -> HttpResponse {
     let jwt = key
         .authenticate(Claims::with_custom_claims(
             json.into_inner(),
@@ -189,16 +191,66 @@ async fn day16part1wrap(key: Data<HS256Key>, json: Json<Value>) -> HttpResponse 
 }
 
 #[get("/16/unwrap")]
-async fn day16part1unwrap(
-    key: Data<HS256Key>,
-    request: HttpRequest,
-) -> Either<Json<Value>, HttpResponse> {
+async fn day16part1unwrap(key: JWTKey, request: HttpRequest) -> Either<Json<Value>, HttpResponse> {
     if let Some(cookie) = request.cookie("gift") {
         if let Ok(claim) = key.verify_token(cookie.value(), None) {
             return Either::Left(Json(claim.custom));
         }
     }
     Either::Right(HttpResponse::BadRequest().finish())
+}
+
+#[derive(Deserialize)]
+struct JwtHeader {
+    //typ: String,
+    alg: String,
+}
+
+enum RSAPublicKey {
+    RS256(RS256PublicKey),
+    RS512(RS512PublicKey),
+}
+
+impl RSAPublicKey {
+    fn new(jwt: &str) -> Option<Self> {
+        let jwt_head_str = jwt.split_once('.')?.0;
+        let jwt_head: JwtHeader =
+            serde_json::from_slice(&base64::decode(jwt_head_str).ok()?).ok()?;
+        let pem = include_str!("../day16_santa_public_key.pem");
+        let key = match jwt_head.alg.as_str() {
+            "RS256" => Self::RS256(RS256PublicKey::from_pem(pem).unwrap()),
+            "RS512" => Self::RS512(RS512PublicKey::from_pem(pem).unwrap()),
+            _ => unimplemented!(),
+        };
+        Some(key)
+    }
+
+    fn verify_token(&self, token: &str) -> Result<JWTClaims<Value>, jwt_simple::Error> {
+        match self {
+            RSAPublicKey::RS256(rs256_public_key) => rs256_public_key.verify_token(token, None),
+            RSAPublicKey::RS512(rs512_public_key) => rs512_public_key.verify_token(token, None),
+        }
+    }
+}
+
+#[post("/16/decode")]
+async fn day16part2(jwt: String) -> Either<HttpResponse, Json<Value>> {
+    dbg!(&jwt);
+    if let Some(key) = RSAPublicKey::new(&jwt) {
+        match key.verify_token(&jwt) {
+            Ok(claim) => {
+                dbg!(&claim.custom);
+                return Either::Right(Json(claim.custom));
+            }
+            Err(err) => {
+                dbg!(&err);
+                if let Ok(JWTError::InvalidSignature) = err.downcast() {
+                    return Either::Left(HttpResponse::Unauthorized().finish());
+                }
+            }
+        }
+    }
+    Either::Left(HttpResponse::BadRequest().finish())
 }
 
 #[allow(clippy::unused_async)]
@@ -225,7 +277,8 @@ async fn main() -> ShuttleActixWeb<impl FnOnce(&mut ServiceConfig) + Send + Clon
             .service(day9refill)
             .service(game::scope())
             .service(day16part1wrap)
-            .service(day16part1unwrap);
+            .service(day16part1unwrap)
+            .service(day16part2);
     };
 
     Ok(config.into())
