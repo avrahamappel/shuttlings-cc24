@@ -1,11 +1,14 @@
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::sync::Mutex;
 
+use actix_web::cookie::Cookie;
 use actix_web::http::header;
 use actix_web::web::{Data, Header, Json, Query, ServiceConfig};
-use actix_web::{get, post, Either, HttpResponse};
+use actix_web::{get, post, Either, HttpRequest, HttpResponse};
 use cargo_toml::ContentType;
+use jwt_simple::prelude::*;
 use serde::Deserialize;
+use serde_json::Value;
 use shuttle_actix_web::ShuttleActixWeb;
 
 mod bucket;
@@ -169,17 +172,48 @@ async fn day9refill(bucket: Data<Mutex<Bucket>>) -> HttpResponse {
     HttpResponse::Ok().finish()
 }
 
+#[post("/16/wrap")]
+async fn day16part1wrap(key: Data<HS256Key>, json: Json<Value>) -> HttpResponse {
+    let jwt = key
+        .authenticate(Claims::with_custom_claims(
+            json.into_inner(),
+            Duration::from_mins(5),
+        ))
+        .expect("key should be valid");
+    let cookie = Cookie::new("gift", jwt);
+    let mut response = HttpResponse::Ok().finish();
+    response
+        .add_cookie(&cookie)
+        .expect("adding cookie should be fine");
+    response
+}
+
+#[get("/16/unwrap")]
+async fn day16part1unwrap(
+    key: Data<HS256Key>,
+    request: HttpRequest,
+) -> Either<Json<Value>, HttpResponse> {
+    if let Some(cookie) = request.cookie("gift") {
+        if let Ok(claim) = key.verify_token(cookie.value(), None) {
+            return Either::Left(Json(claim.custom));
+        }
+    }
+    Either::Right(HttpResponse::BadRequest().finish())
+}
+
 #[allow(clippy::unused_async)]
 #[shuttle_runtime::main]
 async fn main() -> ShuttleActixWeb<impl FnOnce(&mut ServiceConfig) + Send + Clone + 'static> {
     let bucket = Data::new(Mutex::new(Bucket::new())).clone();
     let game = game::new_shared_game().clone();
     let rng = game::new_shared_rng().clone();
+    let jwt_key = Data::new(HS256Key::generate()).clone();
 
     let config = move |cfg: &mut ServiceConfig| {
         cfg.app_data(bucket)
             .app_data(game)
             .app_data(rng)
+            .app_data(jwt_key)
             .service(hello_bird)
             .service(rick_roll)
             .service(day2part1)
@@ -189,7 +223,9 @@ async fn main() -> ShuttleActixWeb<impl FnOnce(&mut ServiceConfig) + Send + Clon
             .service(day5)
             .service(day9)
             .service(day9refill)
-            .service(game::scope());
+            .service(game::scope())
+            .service(day16part1wrap)
+            .service(day16part1unwrap);
     };
 
     Ok(config.into())

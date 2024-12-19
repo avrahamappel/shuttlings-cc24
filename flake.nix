@@ -67,6 +67,8 @@
               "rustc"
               "rustfmt"
             ])
+
+            cmake # required by boring -> jwt-simple
           ];
         };
 
