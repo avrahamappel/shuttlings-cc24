@@ -37,10 +37,10 @@
 
         cch24-validator = naersk'.buildPackage rec {
           name = "cch24-validator";
-          version = "16.0.0";
+          version = "19.0.0";
           src = pkgs.fetchzip {
             url = "https://crates.io/api/v1/crates/${name}/${version}/download";
-            hash = "sha256-xsq7oeMBvCSqcXUfEtcUeElHS0gI4jaw9fD6oKfujxI=";
+            hash = "sha256-61pQ8NFOzXhz1MBx/SBlEk6OgtwA5QAU1G4rwqvHpws=";
             extension = "tar";
           };
         };
@@ -71,17 +71,6 @@
 
             cmake # required by boring -> jwt-simple
           ];
-        };
-
-        # Run cch24-validator tests against the server
-        defaultApp = flake-utils.lib.mkApp {
-          drv = pkgs.writeShellScriptBin "run-cch24-validator-tests" ''
-            ${self.packages.${system}.shuttle}/bin/shuttle run &
-            pid=$!
-            sleep 1
-            ${self.packages.${system}.cch24-validator}/bin/cch24-validator "$@"
-            kill $pid
-          '';
         };
       }
     );
