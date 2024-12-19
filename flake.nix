@@ -58,6 +58,7 @@
           nativeBuildInputs = with pkgs; [
             alejandra
             rust-analyzer
+            cargo-watch
             shuttle
             cch24-validator
             (pkgs.fenix.stable.withComponents [
