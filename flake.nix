@@ -69,8 +69,11 @@
               "rustfmt"
             ])
 
-            cmake # required by boring -> jwt-simple
+            cmake      # required by boring -> jwt-simple
+            postgresql # For connecting to db
           ];
+
+          DBUI_URL = "postgres://postgres:postgres@localhost:16204/variasuit-cch24";
         };
       }
     );

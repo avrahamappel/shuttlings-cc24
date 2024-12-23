@@ -15,6 +15,7 @@ mod bucket;
 mod cargo_toml;
 mod conversion;
 mod game;
+mod quote_book;
 
 use bucket::Bucket;
 use cargo_toml::CargoOrders;
@@ -214,6 +215,7 @@ enum RSAPublicKey {
 impl RSAPublicKey {
     fn new(jwt: &str) -> Option<Self> {
         let jwt_head_str = jwt.split_once('.')?.0;
+        #[allow(deprecated)]
         let jwt_head: JwtHeader =
             serde_json::from_slice(&base64::decode(jwt_head_str).ok()?).ok()?;
         let pem = include_str!("../day16_santa_public_key.pem");
@@ -255,17 +257,21 @@ async fn day16part2(jwt: String) -> Either<HttpResponse, Json<Value>> {
 
 #[allow(clippy::unused_async)]
 #[shuttle_runtime::main]
-async fn main() -> ShuttleActixWeb<impl FnOnce(&mut ServiceConfig) + Send + Clone + 'static> {
+async fn main(
+    #[shuttle_shared_db::Postgres] pool: sqlx::PgPool,
+) -> ShuttleActixWeb<impl FnOnce(&mut ServiceConfig) + Send + Clone + 'static> {
     let bucket = Data::new(Mutex::new(Bucket::new())).clone();
     let game = game::new_shared_game().clone();
     let rng = game::new_shared_rng().clone();
     let jwt_key = Data::new(HS256Key::generate()).clone();
+    let db = quote_book::shared_db_pool(pool).await.clone();
 
     let config = move |cfg: &mut ServiceConfig| {
         cfg.app_data(bucket)
             .app_data(game)
             .app_data(rng)
             .app_data(jwt_key)
+            .app_data(db)
             .service(hello_bird)
             .service(rick_roll)
             .service(day2part1)
@@ -278,7 +284,8 @@ async fn main() -> ShuttleActixWeb<impl FnOnce(&mut ServiceConfig) + Send + Clon
             .service(game::scope())
             .service(day16part1wrap)
             .service(day16part1unwrap)
-            .service(day16part2);
+            .service(day16part2)
+            .service(quote_book::scope());
     };
 
     Ok(config.into())
