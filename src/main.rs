@@ -265,6 +265,7 @@ async fn main(
     let rng = game::new_shared_rng().clone();
     let jwt_key = Data::new(HS256Key::generate()).clone();
     let db = quote_book::shared_db_pool(pool).await.clone();
+    let page_cache = quote_book::shared_page_cache().clone();
 
     let config = move |cfg: &mut ServiceConfig| {
         cfg.app_data(bucket)
@@ -272,6 +273,7 @@ async fn main(
             .app_data(rng)
             .app_data(jwt_key)
             .app_data(db)
+            .app_data(page_cache)
             .service(hello_bird)
             .service(rick_roll)
             .service(day2part1)

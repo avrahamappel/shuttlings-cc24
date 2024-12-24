@@ -1,11 +1,17 @@
+use std::collections::HashMap;
 use std::str::FromStr;
 
-use actix_web::web::{Data, Json, Path};
+use actix_web::web::{Data, Json, Path, Query};
 use actix_web::{delete, get, post, put, Either, HttpResponse, Scope};
 use chrono::{DateTime, Utc};
+use rand::rngs::StdRng;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool};
+use tokio::sync::Mutex;
 use uuid::Uuid;
+
+use crate::game::SharedRng;
 
 type SharedDBPool = Data<PgPool>;
 
@@ -141,6 +147,97 @@ async fn draft(pool: SharedDBPool, form: Json<QuoteRequest>) -> HttpResponse {
     }
 }
 
+type Token = String;
+type Page = i64;
+type SharedPageCache = Data<Mutex<HashMap<Token, Page>>>;
+
+pub fn shared_page_cache() -> SharedPageCache {
+    Data::new(Mutex::new(HashMap::new()))
+}
+
+#[derive(Debug, Deserialize)]
+struct ListParams {
+    token: Token,
+}
+
+#[derive(Debug, Serialize)]
+struct ListResponse {
+    quotes: Vec<Quote>,
+    page: Page,
+    next_token: Option<Token>,
+}
+
+fn random_string(rng: &mut StdRng) -> String {
+    rng.sample_iter(rand::distributions::Alphanumeric)
+        .take(16)
+        .map(char::from)
+        .collect()
+}
+
+#[get("/list")]
+async fn list(
+    pool: SharedDBPool,
+    cache: SharedPageCache,
+    rng: SharedRng,
+    query: Option<Query<ListParams>>,
+) -> HttpResponse {
+    const PAGESIZE: Page = 3;
+
+    let count = match sqlx::query_scalar::<_, Page>("SELECT COUNT(*) FROM quotes")
+        .fetch_one(&**pool)
+        .await
+    {
+        Ok(count) => count,
+        Err(err) => {
+            dbg!(err);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let mut pages = count / PAGESIZE;
+    // Often the last page has less than PAGESIZE
+    if count % PAGESIZE > 0 {
+        pages += 1;
+    }
+
+    let page = if let Some(params) = query {
+        let mut map = cache.lock().await;
+        let Some(page) = map.remove(&params.token) else {
+            return HttpResponse::BadRequest().finish();
+        };
+        page
+    } else {
+        1
+    };
+
+    let next_token = if pages > page {
+        let mut rng = rng.lock().await;
+        let token = random_string(&mut rng);
+        let mut map = cache.lock().await;
+        map.insert(token.clone(), page + 1);
+        Some(token)
+    } else {
+        None
+    };
+
+    match sqlx::query_as::<_, Quote>("SELECT * FROM quotes ORDER BY created_at OFFSET $1 LIMIT $2")
+        .bind((page - 1) * PAGESIZE)
+        .bind(PAGESIZE)
+        .fetch_all(&**pool)
+        .await
+    {
+        Ok(quotes) => HttpResponse::Ok().json(ListResponse {
+            quotes,
+            page,
+            next_token,
+        }),
+        Err(err) => {
+            dbg!(err);
+            HttpResponse::InternalServerError().finish()
+        }
+    }
+}
+
 pub fn scope() -> Scope {
     Scope::new("/19")
         .service(reset)
@@ -148,4 +245,5 @@ pub fn scope() -> Scope {
         .service(remove)
         .service(undo)
         .service(draft)
+        .service(list)
 }

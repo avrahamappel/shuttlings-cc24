@@ -9,7 +9,7 @@ use rand::{Rng, SeedableRng};
 use serde::Deserialize;
 use tokio::sync::{Mutex, RwLock};
 
-type SharedRng = Data<Mutex<StdRng>>;
+pub type SharedRng = Data<Mutex<StdRng>>;
 
 fn new_seeded_rng() -> StdRng {
     StdRng::seed_from_u64(2024)
