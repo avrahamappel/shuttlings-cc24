@@ -37,12 +37,13 @@
 
         cch24-validator = naersk'.buildPackage rec {
           name = "cch24-validator";
-          version = "19.0.0";
+          version = "23.0.0";
           src = pkgs.fetchzip {
             url = "https://crates.io/api/v1/crates/${name}/${version}/download";
-            hash = "sha256-61pQ8NFOzXhz1MBx/SBlEk6OgtwA5QAU1G4rwqvHpws=";
+            hash = "sha256-XD+mXqGqwUJitVdROQ+qc0wcm0gP8Tl15yyw2LNlEGI=";
             extension = "tar";
           };
+          singleStep = true;
         };
 
       in {
