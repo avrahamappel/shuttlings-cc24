@@ -287,7 +287,8 @@ async fn main(
             .service(day16part1wrap)
             .service(day16part1unwrap)
             .service(day16part2)
-            .service(quote_book::scope());
+            .service(quote_book::scope())
+            .service(actix_files::Files::new("/assets", "./assets"));
     };
 
     Ok(config.into())
