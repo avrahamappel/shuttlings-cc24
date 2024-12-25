@@ -15,6 +15,7 @@ mod bucket;
 mod cargo_toml;
 mod conversion;
 mod game;
+mod htmx;
 mod quote_book;
 
 use bucket::Bucket;
@@ -288,7 +289,8 @@ async fn main(
             .service(day16part1unwrap)
             .service(day16part2)
             .service(quote_book::scope())
-            .service(actix_files::Files::new("/assets", "./assets"));
+            .service(actix_files::Files::new("/assets", "./assets"))
+            .service(htmx::scope());
     };
 
     Ok(config.into())
