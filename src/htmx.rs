@@ -1,8 +1,12 @@
 use std::fmt::Display;
+use std::io::Read;
 
+use actix_multipart::form::tempfile::TempFile;
+use actix_multipart::form::MultipartForm;
 use actix_web::http::StatusCode;
 use actix_web::web::Path;
-use actix_web::{get, Either, Responder, Scope};
+use actix_web::{get, post, Either, Responder, Scope};
+use serde::Deserialize;
 
 #[get("/star")]
 async fn star() -> impl Responder {
@@ -87,9 +91,61 @@ async fn ornament(params: Path<(String, String)>) -> impl Responder {
     ))
 }
 
+#[derive(Debug, Deserialize)]
+struct Package {
+    checksum: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Lockfile {
+    package: Vec<Package>,
+}
+
+#[derive(Debug, MultipartForm)]
+struct LockfileForm {
+    #[multipart(limit = "2MB")]
+    lockfile: TempFile,
+}
+
+#[post("/lockfile")]
+async fn lockfile(MultipartForm(form): MultipartForm<LockfileForm>) -> impl Responder {
+    let mut file_contents = String::new();
+    if form
+        .lockfile
+        .file
+        .as_file()
+        .read_to_string(&mut file_contents)
+        .is_ok()
+    {
+        if let Ok(lockfile) = toml::from_str::<Lockfile>(&file_contents) {
+            let mut sprinkles = vec![];
+            for checksum in lockfile.package.iter().filter_map(|p| p.checksum.as_ref()) {
+                if checksum.len() >= 10 {
+                    let color = &checksum[0..6];
+                    if u32::from_str_radix(color, 16).is_ok() {
+                        if let Ok(top) = u8::from_str_radix(&checksum[6..8], 16) {
+                            if let Ok(left) = u8::from_str_radix(&checksum[8..10], 16) {
+                                sprinkles.push(format!(
+                                    r#"<div style="background-color:#{color};top:{top}px;left:{left}px;"></div>"#
+                                ));
+                                continue;
+                            }
+                        }
+                    }
+                }
+                return Either::Left(("", StatusCode::UNPROCESSABLE_ENTITY));
+            }
+
+            return Either::Right(sprinkles.join("\n"));
+        }
+    }
+    Either::Left(("", StatusCode::BAD_REQUEST))
+}
+
 pub fn scope() -> Scope {
     Scope::new("/23")
         .service(star)
         .service(present)
         .service(ornament)
+        .service(lockfile)
 }
