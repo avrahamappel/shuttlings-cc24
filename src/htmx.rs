@@ -62,6 +62,30 @@ async fn present(color_str: Path<String>) -> impl Responder {
     ))
 }
 
+#[get("/ornament/{state}/{n}")]
+async fn ornament(params: Path<(String, String)>) -> impl Responder {
+    let (state, n) = params.into_inner();
+    let (class, next_state) = match state.as_str() {
+        "on" => (" on", "off"),
+        "off" => ("", "on"),
+        _ => {
+            return Either::Left(("", StatusCode::IM_A_TEAPOT));
+        }
+    };
+    Either::Right(format!(
+        r#"<div
+    class="ornament{class}"
+    id="ornament{n}"
+    hx-trigger="load delay:2s once"
+    hx-get="/23/ornament/{next_state}/{n}"
+    hx-swap="outerHTML"
+></div>"#
+    ))
+}
+
 pub fn scope() -> Scope {
-    Scope::new("/23").service(star).service(present)
+    Scope::new("/23")
+        .service(star)
+        .service(present)
+        .service(ornament)
 }
