@@ -65,6 +65,10 @@ async fn present(color_str: Path<String>) -> impl Responder {
 #[get("/ornament/{state}/{n}")]
 async fn ornament(params: Path<(String, String)>) -> impl Responder {
     let (state, n) = params.into_inner();
+    let n = n
+        .replace('"', "&quot;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;");
     let (class, next_state) = match state.as_str() {
         "on" => (" on", "off"),
         "off" => ("", "on"),
